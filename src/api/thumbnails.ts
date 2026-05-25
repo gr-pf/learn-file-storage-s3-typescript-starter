@@ -5,6 +5,8 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { Buffer } from 'node:buffer';
+import path from "node:path";
+import { getAssetDiskPath, getAssetURL, mediaTypeToExt } from "./assets";
 
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
@@ -19,6 +21,15 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   console.log("uploading thumbnail for video", videoId, "by user", userID);
 
   // TODO: implement the upload here
+  const db = cfg.db;
+  const video = getVideo(db, videoId);
+  if (!video) {
+    throw new NotFoundError("Video not found")
+  }
+  if (video.userID !== userID) {
+    throw new UserForbiddenError("Forbidden: cant access this video")
+  }
+
   const formData = await req.formData();
   const file = formData.get("thumbnail");
   if (!(file instanceof File)) {
@@ -35,24 +46,23 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new BadRequestError("Missing Content-Type for thumbnail");
   }
 
+  const fileExt = mediaTypeToExt(mediaType);
+  if (!fileExt) {
+    throw new BadRequestError("Invalid fileExt for thumbnail");
+  }
+
   const fileData = await file.arrayBuffer();
   if (!fileData) {
     throw new Error("Error reading file data");
   }
-  const buf = Buffer.from(fileData);
-  const buf64 = buf.toString("base64");
-  const dataURL = `data:${mediaType};base64,${buf64}`
 
-  const db = cfg.db;
-  const video = getVideo(db, videoId);
-  if (!video) {
-    throw new NotFoundError("Video not found")
-  }
-  if (video.userID !== userID) {
-    throw new UserForbiddenError("Forbidden: cant access this video")
-  }
+  const fileName = `${videoId}${fileExt}`
 
-  video.thumbnailURL = dataURL;
+  const filePath = getAssetDiskPath(cfg, fileName);
+  await Bun.write(filePath, fileData);
+
+  const fileURL = getAssetURL(cfg, fileName);
+  video.thumbnailURL = fileURL;
   updateVideo(db, video);
 
   return respondWithJSON(200, video);
