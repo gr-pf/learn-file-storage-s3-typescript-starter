@@ -6,7 +6,8 @@ import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { Buffer } from 'node:buffer';
 import path from "node:path";
-import { getAssetDiskPath, getAssetURL, mediaTypeToExt } from "./assets";
+import { getAssetDiskPath, getAssetPath, getAssetURL, mediaTypeToExt } from "./assets";
+import { randomBytes } from "node:crypto";
 
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
@@ -59,7 +60,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new Error("Error reading file data");
   }
 
-  const fileName = `${videoId}${fileExt}`
+  // const rndBase64Name = randomBytes(32).toString("base64");
+  // const fileName = `${rndBase64Name}${fileExt}`
+  const fileName = getAssetPath(mediaType);
 
   const filePath = getAssetDiskPath(cfg, fileName);
   await Bun.write(filePath, fileData);
