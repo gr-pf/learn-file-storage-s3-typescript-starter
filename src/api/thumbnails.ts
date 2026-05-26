@@ -60,8 +60,6 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new Error("Error reading file data");
   }
 
-  // const rndBase64Name = randomBytes(32).toString("base64");
-  // const fileName = `${rndBase64Name}${fileExt}`
   const fileName = getAssetPath(mediaType);
 
   const filePath = getAssetDiskPath(cfg, fileName);
