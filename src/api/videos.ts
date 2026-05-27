@@ -55,8 +55,9 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
   const tempFilePath = path.join("/tmp", `${videoId}.mp4`);
   await Bun.write(tempFilePath, file);
+  const aspectRatio = await getVideoAspectRatio(tempFilePath);
 
-  let key = `${videoId}.mp4`;
+  let key = `${aspectRatio}/${videoId}.mp4`;
   await uploadVideoToS3(cfg, key, tempFilePath, "video/mp4");
 
   const fileURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
@@ -70,3 +71,34 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 }
 
 
+async function getVideoAspectRatio(filePath: string): Promise<string> {
+  const proc = Bun.spawn(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", filePath], {
+    stdout: "pipe",
+    stderr: "pipe"
+  })
+  const stdoutText = await new Response(proc.stdout).text();
+  const stderrText = await new Response(proc.stderr).text();
+  await proc.exited;
+
+  const exitCode = proc.exitCode;
+
+
+  if (exitCode !== 0) {
+    throw new Error(`ffprobe error: ${stderrText}`);
+  }
+
+  const data = await JSON.parse(stdoutText);
+  if (!data.streams || data.streams.length === 0) {
+    throw new Error("No video streams found");
+  }
+
+  const width = data["streams"][0].width;
+  const height = data["streams"][0]["height"];
+  let ratio: string = "other";
+  if (((15.9 * height) <= (9 * width)) && ((9 * width) <= (16.1 * height))) {
+    ratio = "landscape";
+  } else if (((15.9 * width) <= (9 * height)) && ((9 * height) <= (16.1 * width))) {
+    ratio = "portrait";
+  }
+  return ratio;
+}
